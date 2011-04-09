@@ -211,13 +211,13 @@ class TestGetSpotsForRectangle(object):
 		
 		expected_spots = [
 			## facing left
-			R(occ.x - INF, occ.y - INF, INF,  2 * INF + occ.h),
+			R(occ.x - INF, occ.y - INF, INF, occ.h + 2 * INF),
 			## facing right
-			R(occ.x + occ.w, occ.y - INF, INF, 2 * INF + occ.h),
+			R(occ.x + occ.w, occ.y - INF, INF, occ.h + 2 * INF),
 			## facing up
-			R(occ.x - INF, occ.y + occ.h, 2 * INF + occ.w, INF),
+			R(occ.x - INF, occ.y + occ.h, occ.w + 2 * INF, INF),
 			## facing down
-			R(occ.x - INF, occ.y - INF, 2 * INF + occ.w, INF)
+			R(occ.x - INF, occ.y - INF, occ.w + 2 * INF, INF)
 		]
 
 		assert sorted(spots, key=lambda r: tuple(r)) \
@@ -231,21 +231,27 @@ class TestGetSpotsForRectangle(object):
 
 
 	def test_outer_complex(self):
-		r1, r2 = R(0, 0, 10, 30), R(10, 10, 20, 10)
+		r1, r2, r3 = R(0, 10, 10, 10), R(10, 0, 10, 30), R(20, 10, 10, 10)
 		cloud = RectangleCloud([r1, r2])
 		occ = cloud.get_occupied_rect()
 
 		spots = cloud.get_spots_for_rectangle(R(0, 0, 20, 20), steps=24)
-		
+
 		print (spots)
 
 		expected_spots = [
-			R(occ.x + occ.w, occ.y -INF, INF, occ.h + 2 * INF),
-			R(r1.x + r1.w, r2.y + r2.h, INF, INF),
+			R(occ.x + occ.w, occ.y - INF, INF, occ.h + 2 * INF),
+			R(r2.x + r2.w, r3.y + r3.h, occ.x + occ.w - (r2.x + r2.w) + INF, 
+										occ.y + occ.h - (r3.y + r3.h) + INF),
 			R(occ.x - INF, occ.y + occ.h, occ.w + 2 * INF, INF),
+			R(occ.x - INF, r1.y + r1.w, r2.x - occ.x + INF,
+										occ.y + occ.h - (r1.y + r1.h) + INF),
 			R(occ.x - INF, occ.y - INF, INF, occ.h + 2 * INF),
+			R(occ.x - INF, occ.y - INF, r2.x - occ.x + INF,
+										r1.y - occ.y + INF),
 			R(occ.x - INF, occ.y - INF, occ.w + 2 * INF, INF),
-			R(r1.x + r1.w, r2.y - INF, INF, INF)
+			R(r1.x + r1.w, occ.y - INF, occ.x + occ.w - (r1.x + r1.w) + INF,
+														r2.y - occ.y + INF)
 		]
 
 		assert sorted(spots, key=lambda r: tuple(r)) \
