@@ -46,6 +46,11 @@ __all__ = ["Rectangle", "RectangleCloud", "get_new_ratio", "get_distance",
 			"apply_rubberband", "apply_centering"]
 
 
+## Must be something that can be used algebraically, 
+## so it can't be float('inf').
+INF = INFINITY = sys.maxint
+
+
 def get_new_ratio(baserect, tobeadded):
 	"""If Rectangle *tobeadded* was added to Rectangle *baserect*,
 	return the new aspect ratio.
@@ -359,6 +364,12 @@ class RectangleCloud(object):
 		return [r for r in self._rects if r.intersects(selectionrect)]
 
 	def get_spots_for_rectangle(self, rectangle, steps=None):
+		"""Determine possible leeway Rectangles for the placement
+		of *rectangle*. A leeway Rectangle covers a spot between 
+		Rectangles already placed in the cloud or if there are no
+		Rectangles found, it will point to *INF*.
+		"""
+
 		if steps is None:
 			steps = self._max_steps
 
@@ -384,16 +395,15 @@ class RectangleCloud(object):
 			)
 
 			for rect in sector_rects:
-				# print("rect in sector_rects", rect, rect.tag.name)
 				if rect is rectangle:
 					continue
 
-				# Get distance from sector origin to outer vertical boundary 
-				# of rect, seen from sector origin (normalized to centered coordinates).
+				## Get distance from sector origin to outer vertical boundary 
+				## of rect, seen from sector origin (normalized to centered coordinates).
 				curr_x = abs(occ.x + occ.w / 2.0 - (rect.x + rect.w * sector_x))
 				curr_y = curr_x * tan
 
-				# curr_x and curr_y denormalized
+				## curr_x and curr_y denormalized
 				x_section = rect.x + rect.w * sector_x
 				y_section = occ.y + occ.h / 2.0 + curr_y * (sector_y or -1)
 				
@@ -411,77 +421,77 @@ class RectangleCloud(object):
 					lower_bound = y_section - rectangle.h * (not sector_y)
 					upper_bound = lower_bound + rectangle.h
 
-					horizontal_selector = Rectangle(
-						left_bound if sector_x else - sys.maxint,
+					hsel = Rectangle(
+						left_bound if sector_x else right_bound - INF,
 						lower_bound,
-						occ.x + occ.w - left_bound + sys.maxint if sector_x \
-							else sys.maxint + right_bound,
+						INF,
 						rectangle.h
 					)
 
-					horizontals = self.get_selection_by_rect(horizontal_selector)
-
+					horizontals = self.get_selection_by_rect(hsel)
 					if horizontals:
 						if sector_x:
 							horizontals.sort(key=lambda r: r.x)
 							nearest = horizontals[0]
 							right_bound = nearest.x
 						else:
-							horizontals.sort(key=lambda r: r.x + r.w, reverse=True)
-							nearest = horizontals[0]
+							horizontals.sort(key=lambda r: r.x + r.w)
+							nearest = horizontals[-1]
 							left_bound = nearest.x + nearest.w
 					else:
-						left_bound = horizontal_selector.x
-						right_bound = left_bound + horizontal_selector.w
+						left_bound = hsel.x
+						right_bound = left_bound + hsel.w
 
 					print("	vertical cut:", left_bound, lower_bound, 
 												right_bound, upper_bound)
 					
 					if right_bound - left_bound < rectangle.w:
-						print("	vertical cut: aborted on w too small?", right_bound-left_bound<rectangle.w)
+						print("	vertical cut: aborted on w too small.")
 						continue
 
-					vertical_selector = Rectangle(
+					vsel = Rectangle(
 						left_bound,
-						- sys.maxint,
+						occ.y - INF,
 						right_bound - left_bound,
-						occ.y + occ.h + sys.maxint * 2
+						occ.h + 2 * INF
 					)
 
-					verticals = self.get_selection_by_rect(vertical_selector)
-
+					verticals = self.get_selection_by_rect(vsel)
 					if verticals:
 						verticals.sort(key=lambda r: r.y)
 						i = bisect.bisect([r.y for r in verticals], y_section)
-						# Fringe case 1: y_section is below lowest rect's y.
+						
+						## Fringe case 1: y_section is below lowest rect's y.
 						if i == 0:
 							upper_bound = verticals[0].y
-							lower_bound = vertical_selector.y
-						# Fringe case 2: y_section is above highest rect's y.
+							lower_bound = vsel.y
+
+						## Fringe case 2: y_section is above highest rect's y.
 						elif i == len(verticals):
-							# There is a rect occuying the space, continue.
+							## There is a rect occuying the space, continue.
 							if (verticals[-1].y < y_section 
 									< verticals[-1].y + verticals[-1].h):
 								continue
 							else:
 								lower_bound = verticals[-1].y + verticals[-1].h
-								upper_bound = vertical_selector.y + vertical_selector.h
-						# Norm case: y_section is inside the rects' y values.
+								upper_bound = lower_bound + INF
+
+						## Norm case: y_section is inside the rects' y values.
 						else:
 							upper_bound = verticals[i].y
 							lower_bound = verticals[i-1].y + verticals[i-1].h
 					else:
-						lower_bound = vertical_selector.y
-						upper_bound = vertical_selector.y + vertical_selector.h
+						lower_bound = vsel.y
+						upper_bound = vsel.y + vsel.h
 
 					print("	vertical cut:", left_bound, lower_bound, 
 												right_bound, upper_bound)
-												
+
 					if upper_bound - lower_bound < rectangle.h:
-						print("	vertical cut: aborted on h too small?", upper_bound-lower_bound<rectangle.h)
+						print("	vertical cut: aborted on h too small.")
 						continue
 
-					# Candidate spot was found
+					## Candidate spot was found
 					newr = Rectangle(
 						left_bound,
 						lower_bound,
@@ -493,14 +503,14 @@ class RectangleCloud(object):
 						results.append(newr)
 
 					continue
-						
 
-				# Get distance from sector origin to outer horizontal boundary 
-				# of rect, seen from sector origin.
+
+				## Get distance from sector origin to outer horizontal boundary 
+				## of rect, seen from sector origin.
 				curr_y = abs(occ.y + occ.h / 2.0 - (rect.y + rect.h * sector_y))
 				curr_x = curr_y / tan
-				
-				# curr_x and curr_y denormalized
+
+				## curr_x and curr_y denormalized
 				y_section = rect.y + rect.h * sector_y
 				x_section = occ.x + occ.w / 2.0 + curr_x * (sector_x or -1)
 				
@@ -518,77 +528,80 @@ class RectangleCloud(object):
 					lower_bound = y_section - rectangle.h * (not sector_y)
 					upper_bound = lower_bound + rectangle.h
 
-					vertical_selector = Rectangle(
+					vsel = Rectangle(
 						left_bound,
-						lower_bound if sector_y else - sys.maxint,
+						occ.y + occ.h - lower_bound + INF if sector_y else upper_bound - INF,
 						rectangle.w,
-						occ.y + occ.h - lower_bound + sys.maxint if sector_y else sys.maxint + upper_bound
+						INF
 					)
 
-					verticals = self.get_selection_by_rect(vertical_selector)
-
+					verticals = self.get_selection_by_rect(vsel)
 					if verticals:
 						if sector_y:
 							verticals.sort(key=lambda r: r.y)
 							nearest = verticals[0]
 							upper_bound = nearest.y
 						else:
-							verticals.sort(key=lambda r: r.y + r.h, reverse=True)
-							nearest = verticals[0]
+							verticals.sort(key=lambda r: r.y + r.h)
+							nearest = verticals[-1]
 							lower_bound = nearest.y + nearest.h
 					else:
-						lower_bound = vertical_selector.y
-						upper_bound = lower_bound + vertical_selector.h
-					
+						lower_bound = vsel.y
+						upper_bound = lower_bound + vsel.h
+
 					print("	horizontal cut:" ,left_bound, lower_bound, 
 												right_bound, upper_bound)
 
 					if upper_bound - lower_bound < rectangle.h:
-						print("	horizontal cut: aborted on h too small?", upper_bound-lower_bound<rectangle.h)
+						print("	horizontal cut: aborted on h too small.")
 						continue
 
-					horizontal_selector = Rectangle(
-						-sys.maxint,
+					hsel = Rectangle(
+						occ.x - INF,
 						lower_bound,
-						occ.x + occ.w + sys.maxint * 2,
+						occ.w + 2 * INF,
 						upper_bound - lower_bound
 					)
 
-					horizontals = self.get_selection_by_rect(horizontal_selector)
-
+					horizontals = self.get_selection_by_rect(hsel)
 					if horizontals:
 						horizontals.sort(key=lambda r: r.x)
 						i = bisect.bisect([r.x for r in horizontals], x_section)
-						# Fringe case 1: x_section is below lowest rect's x.
+
+						## Fringe case 1: all found rect's are farther right than
+						## *x_section*.
 						if i == 0:
 							right_bound = horizontals[0].x
-							left_bound = right_bound - horizontal_selector.w
-						# Fringe case 2: x_section is above highest rect's x.
+							left_bound = right_bound - hsel.w
+
+						## Fringe case 2: all found rect's are farther left than
+						## *x_section*.
 						elif i == len(horizontals):
-							# There is a rect occuying the space, continue.
+							## There is a rect occuying the space, continue.
 							if (horizontals[-1].x < x_section 
 									< horizontals[-1].x + horizontals[-1].w):
 								continue
 							else:
 								left_bound = horizontals[-1].x + horizontals[-1].w
-								right_bound = horizontal_selector.x + horizontal_selector.w
-						# Norm case: x_section is inside the rects' x values.
+								right_bound = left_bound + INF
+
+						## Case 3: x_section is somewhere among the rects.
 						else:
 							right_bound = horizontals[i].x
 							left_bound = horizontals[i-1].x + horizontals[i-1].w
 					else:
-						left_bound = horizontal_selector.x
-						right_bound = left_bound + horizontal_selector.w
+						left_bound = hsel.x
+						right_bound = left_bound + hsel.w
 
 						
 					print("	horizontal cut:" ,left_bound, lower_bound, 
 												right_bound, upper_bound)
 						
 					if right_bound - left_bound < rectangle.w:
-						print("	horizontal cut: aborted on w too small?", right_bound-left_bound<rectangle.w)
+						print("	horizontal cut: aborted on w too small.")
 						continue
 
-					# Candidate spot was found
+					## Candidate spot was found
 					newr = Rectangle(
 						left_bound,
 						lower_bound,
@@ -602,15 +615,14 @@ class RectangleCloud(object):
 							print(
 								newr, rr, self._rects.index(rr), self._rects,
 								newr.get_intersection(rr), i, x_section, y_section,
-								vertical_selector, verticals, 
-								horizontal_selector, horizontals
+								vsel, verticals, 
+								hsel, horizontals
 							)
 							raise Exception("Candidate spot overlaps.")
 
 					if not newr in results:
 						results.append(newr)
 
-			
 		return results
 			
 			
