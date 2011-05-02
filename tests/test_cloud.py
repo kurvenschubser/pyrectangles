@@ -210,16 +210,19 @@ class TestGetSpotsForRectangle(object):
 		occ = cloud.get_occupied_rect()
 		
 		expected_spots = [
-			## facing left
-			R(occ.x - INF, occ.y - INF, INF, occ.h + 2 * INF),
 			## facing right
 			R(occ.x + occ.w, occ.y - INF, INF, occ.h + 2 * INF),
 			## facing up
 			R(occ.x - INF, occ.y + occ.h, occ.w + 2 * INF, INF),
+			## facing left
+			R(occ.x - INF, occ.y - INF, INF, occ.h + 2 * INF),
 			## facing down
 			R(occ.x - INF, occ.y - INF, occ.w + 2 * INF, INF)
 		]
 
+		print (spots)
+		
+		
 		assert sorted(spots, key=lambda r: tuple(r)) \
 				== sorted(expected_spots, key=lambda r: tuple(r))
 
