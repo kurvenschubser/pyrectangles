@@ -403,30 +403,39 @@ class RectangleCloud(object):
 		return select_by_rect(self._rects, selector)
 
 	def get_spots_for_rectangle(self, rectangle):
-		"""Determine possible leeway Rectangles for the placement
-		of *rectangle*. A leeway Rectangle covers a spot between
-		Rectangles already placed in the cloud.
+		"""Determine possible leeway Rectangles for the 
+		placement of *rectangle*, called a 'spot'.
+
+		A spot covers space between Rectangles already 
+		placed in the cloud or, if there are none in a 
+		certain direction, points to INFINITY for that 
+		direction.
 
 		To achieve this goal, all existing Rectangles in
-		RectangleCloud.get_rects() are scanned by a beam emanating
-		from their common center,
+		RectangleCloud.get_rects() are scanned by a beam 
+		emanating from their common center,
 		RectangleCloud.get_occupation_rect().get_center().
-		The beam rotates anti-clockwise in *steps* steps. If it
-		cuts any of RectangleCloud.get_rects(), Rectangles
-		representing the unoccupied space until another Retangle
-		is found, are computed. If there are no Rectangles found
-		for any one direction, the computed Rectangle will point
-		to *INFINITY* for that direction.
+		The beam rotates anti-clockwise in *steps* steps. 
+		If there is a cutting point, it will be the origin 
+		for an orthogonal selector pointing to the 
+		orientation of the rectangle border cut by the 
+		cutting point. The nearest Rectangle encountered 
+		by the orthogonal selector determines the upper 
+		bounds of the spot.
 
-		A found leeway is guaranteed to fully accomodate *rectangle*.
+		From there, the selection is extended on its sides. 
+		The nearest Rectangles found determine the sides of 
+		the spot.
 
-		Returns found leeway spots.
+		A lot of conversions take place in order to facilitate
+		circular scanning.
+
+		Returns all spots.
 		"""
 
 		steps = self._steps
 
 		stepped_pi = math.pi / steps
-		avoid_zero_div = 0.000001
 
 		occ = self.get_occupied_rect()
 		cx, cy = occ.get_center()
@@ -440,26 +449,31 @@ class RectangleCloud(object):
 		i = 0
 		while i < steps:
 			quadrant, rest = divmod(i, s_steps)
+			print("quadrant", quadrant, "rest", rest)
 
 			## At sector boundary
 			if not rest:
-				sector_x = int(quadrant in (0, 3))
-				sector_y = int(quadrant in (0, 1))
-
 				# sector_x = int(not(steps-s_steps < steps - i < s_steps))
 				# sector_y = int(i < steps / 2)
+				sector_x = int(quadrant in (0, 3))
+				sector_y = int(quadrant in (0, 1))
 
 				rects_in_sector = self.get_selection_by_rect(
 					self.get_sector_rect(sector_x, sector_y)
 				)
+				
+				print("sector boundary", sector_x, sector_y)
+				print("rects_in_sector", rects_in_sector)
+				
 
 				## nothing to scan, advance loop to next sector
 				if not rects_in_sector:
 					i += s_steps
 					continue
 
-			tan = math.tan(2 * stepped_pi * i + avoid_zero_div)
-			
+			## avoiding zero division error
+			tan = math.tan(2 * stepped_pi * i + 0.000001)
+
 			i += 1
 
 			res = []
@@ -468,55 +482,67 @@ class RectangleCloud(object):
 					continue
 
 				## inner vertical cut
+				outer, vertical = False, True
 				p = get_cut_point(rect, cx, cy, tan, sector_x, sector_y,
-															False, True)
-				if p:
-					sel = self._get_selector(occ, sector_x, sector_y, 
-										cut_x, cut_y, outer, vertical)
-					sp = self._get_spot(rectangle, occ, p[0], p[1], sel,
-																vertical)
-					res.append(sp)
+														outer, vertical)
+				if not p:
+					## inner horizontal cut
+					outer, vertical = False, False
+					p = get_cut_point(rect, cx, cy, tan, sector_x, sector_y,
+															outer, vertical)
+					if not p:
+						continue
 
-				## inner horizontal cut
-				else:
-					p = get_cut_point(rect, cx, cy, tan, sector_x,
-												sector_y, False, False)
-					if p:
-						sel = self._get_selector(occ, sector_x, sector_y, 
-										cut_x, cut_y, outer, vertical)
-						sp = self._get_spot(rectangle, occ, p[0], p[1], sel,
-																vertical)
-						res.append(sp)
+				cut_x, cut_y = p
+				sel = self._get_selector(occ, sector_x, sector_y, 
+											cut_x, cut_y, outer, vertical)
+				sp = self._get_spot(rectangle, occ, cut_x, cut_y, sel,
+															vertical)
+				print("cut_x", cut_x, "cut_y", cut_y, "outer", outer, "vertical", vertical)
+				print("sel", sel, "sp", sp)
+				
+				res.append(sp)
+
+			for rect in rects_in_sector:
+				if rect is rectangle:
+					continue
 
 				## outer vertical cut
+				outer, vertical = True, True
 				p = get_cut_point(rect, cx, cy, tan, sector_x, sector_y,
-															True, True)
-				if p:
-					sel = self._get_selector(occ, sector_x, sector_y, 
-										cut_x, cut_y, outer, vertical)
-					sp = self._get_spot(rectangle, occ, p[0], p[1], sel, 
-																vertical)
-					res.append(sp)
+														outer, vertical)
+				if not p:
+					## outer horizontal cut
+					outer, vertical = True, False
+					p = get_cut_point(rect, cx, cy, tan, sector_x, sector_y, 
+															outer, vertical)
+					if not p:
+						continue
 
-				## outer horizontal cut
-				else:
-					p = get_cut_point(rect, cx, cy, tan, sector_x,
-												sector_y, True, False)
-					if p:
-						sel = self._get_selector(occ, sector_x, sector_y, 
-										cut_x, cut_y, outer, vertical)
-						sp = self._get_spot(rectangle, occ, p[0], p[1], sel,
-																vertical)
-						res.append(sp)
+				cut_x, cut_y = p
+				sel = self._get_selector(occ, sector_x, sector_y, 
+											cut_x, cut_y, outer, vertical)
+				sp = self._get_spot(rectangle, occ, cut_x, cut_y, sel,
+														vertical)
+				print("cut_x", cut_x, "cut_y", cut_y, "outer", outer, "vertical", vertical)
+				print("sel", sel, "sp", sp)
+
+				res.append(sp)
 
 			for sp in filter(None, res):
 				if sp not in results:
-					results.extend(sp)
+					results.append(sp)
 
 		return results
 
 	def _get_cut_point(self, rect, cx, cy, tan, sector_x, sector_y,
 												outer, vertical):
+		"""Determine wether the line defined by *cx*, *cy*, 
+		*tan* cuts through *rect*. Consider 
+		transformations due to differing quadrants 
+		(defined by *sector_x*, *sector_y*) and different 
+		orientations (defined by *outer*, *vertical*).
+		"""
 
 		if vertical:
 			considerw = int((not outer and not sector_x) \
@@ -525,10 +551,7 @@ class RectangleCloud(object):
 			rel_y = rel_x * tan
 			cut_x = rect.x + rect.w * considerw
 			cut_y = cy + rel_y * (sector_y or -1)
-
-			print("_get_cut_point", rel_y, rel_x, cut_y, cut_x)
-
-			if rect.y <= cut_y <= rect.y + rect.h:
+			if rect.y < cut_y < rect.y + rect.h:
 				return (cut_x, cut_y)
 		else:
 			considerh = int((not outer and not sector_y) \
@@ -537,12 +560,8 @@ class RectangleCloud(object):
 			rel_x = rel_y / tan
 			cut_y = rect.y + rect.h * considerh
 			cut_x = cx + rel_x * (sector_x or -1)
-
-			print("_get_cut_point", rel_y, rel_x, cut_y, cut_x)
-
-			if (rect.x <= cut_x <= rect.x + rect.w):
+			if (rect.x < cut_x < rect.x + rect.w):
 				return (cut_x, cut_y)
-
 		return ()
 
 
@@ -594,9 +613,6 @@ class RectangleCloud(object):
 			else:
 				raise Exception("*sel* has no dimension.")
 
-
-		print("\nnew run")		
-		
 		ortsel = Rectangle(
 			0,
 			0, 
@@ -616,17 +632,29 @@ class RectangleCloud(object):
 												facing_down))) == 1:
 			raise Exception("*sel*'s orientation is nonsense.")
 
-		## rect occupies space where pivot is.
-		does_cut = (lambda r, pvt: r.y < pvt < r.y + r.h) if vertical \
-					else (lambda r, pvt: r.x < pvt < r.x + r.w)
+		def does_cut(r, pvt, vert):
+			"""Rectangle *r* occupies space where at point *pvt*.
+			Take orientation *vert* into account.
+			"""
+
+			## it is r.y <= pvt (or r.x <= pvt) due to the way 
+			## bisect.bisect works: pvt == r.y is treated the same as 
+			## pvt > r.y and then the *leeway* rect (see below) will 
+			## be placed at r.y + r.h which is wrong.
+			return vert and (r.y <= pvt < r.y + r.h) \
+				or (r.x <= pvt < r.x + r.w)
+				
+		# does_cut = (lambda r, pvt: r.y <= pvt < r.y + r.h) if vertical \
+					# else (lambda r, pvt: r.x <= pvt < r.x + r.w)
 
 		sortkey_sides = (lambda r: r.y) if vertical else (lambda r: r.x)
 
 		selection = self.get_selection_by_rect(sel)
 
-		######################################################
-		## Make sure *rectangle* fits on the sideways axis. ##
-		######################################################
+		########################################################
+		##  Make sure *rectangle* fits on the sideways axis.  ##
+		## Move *ortsel* so its middle is closest to *pivot*. ##
+		########################################################
 
 		restrictor = Rectangle(
 			sel.x + (sel.w - rectangle.w) * facing_left,
@@ -634,50 +662,47 @@ class RectangleCloud(object):
 			rectangle.w if vertical else sel.w,
 			rectangle.h if not vertical else sel.h
 		)
-		sideways = select_by_rect(selection, restrictor)
+		
+		leeway = sel.clone()
 
+		sideways = select_by_rect(selection, restrictor)
 		if sideways:
 			sideways.sort(key=sortkey_sides)
 			extract = [r.y for r in sideways] if vertical \
 								else [r.x for r in sideways]
 			pivot = cut_y if vertical else cut_x
 			i = bisect.bisect(extract, pivot)
-			
-			print("i",i, "pivot",pivot)
-			print("ortsel 1", ortsel)
-			print("sideways 1", sideways)
-			print("restrictor", restrictor)
 
 			## Fringe case 1: cut_y is below lowest rect's y.
 			if not i:
+				ir = sideways[0]
 				if vertical:
-					ortsel.y = cut_y \
-							+ min((rectangle.h / 2.0, sideways[0].y - cut_y)) \
-							- rectangle.h
-
+					leeway.y = min((leeway.y, ir.y - rectangle.h))
+					leeway.h = ir.y - leeway.y
 				else:
-					ortsel.x = cut_x \
-							+ min((rectangle.w / 2.0, sideways[0].x - cut_x)) \
-							- rectangle.w
+					leeway.x = min((leeway.x, ir.x - rectangle.w))
+					leeway.w = ir.x - leeway.x
 
 			## Fringe case 2: cut_y is above highest rect's y.
 			elif i == len(sideways):
 				ir = sideways[-1]
 
-				if does_cut(ir, pivot):
+				if does_cut(ir, pivot, vertical):
 					return None
 
 				if vertical:
-					ortsel.y = cut_y - min((rectangle.h / 2.0, 
-											cut_y - (ir.y + ir.h)))
+					leeway.y = ir.y + ir.h
+					leeway.h = max((leeway.y + rectangle.h, sel.y + sel.h)) \
+								- leeway.y
 				else:
-					ortsel.x = cut_x - min((rectangle.w / 2.0, 
-											cut_x - (ir.x + ir.w)))
+					leeway.x = ir.x + ir.w
+					leeway.w = max((leeway.x + rectangle.w, sel.x + sel.w)) \
+								- leeway.x
 
 			## Norm case: cut_y is inside the rects' y values.
 			else:
 				ir0 = sideways[i-1]
-				if does_cut(ir0, pivot):
+				if does_cut(ir, pivot, vertical):
 					return None
 
 				ir1 = sideways[i]
@@ -686,54 +711,20 @@ class RectangleCloud(object):
 					or not vertical and (ir1.x - (ir0.x + ir0.w) < rectangle.w):
 					return None
 
-				## move ortsel so its middle is closest to pivot
 				if vertical:
-					ortsel.h = rectangle.h
-					leeway = Rectangle(
-						sel.x,
-						ir0.y + ir0.h,
-						sel.w,
-						ir1.y - (ir0.y + ir0.h)
-					)
+					leeway.y = ir0.y + ir0.h
+					leeway.h = ir1.y - leeway.y
 				else:
-					ortsel.w = rectangle.w
-					leeway = Rectangle(
-						ir0.x + ir0.w,
-						sel.y,
-						ir1.x - (ir0.x + ir0.w),
-						sel.h
-					)
-				ortsel = rubberband((cut_x, cut_y), leeway, ortsel)
-				
-				print("leeway", leeway)
+					leeway.x = ir0.x + ir0.w
+					leeway.w = ir1.x - leeway.x
 
-		else:
-			## since there are no colliding rects on the sideways axis,
-			## shrink *ordsel* to width/height (according to orientation) 
-			## of *rectangle* and center on (cut_x, cut_y).
-			tmpsel = rubberband((cut_x, cut_y), ortsel, rectangle)
-			if vertical:
-				ortsel.y = tmpsel.y
-				ortsel.h = tmpsel.h
-			else:
-				ortsel.x = tmpsel.x
-				ortsel.w = tmpsel.w
+		ortsel = rubberband((cut_x, cut_y), leeway, ortsel)
 
-		if vertical:
-			ortsel.h = rectangle.h
-		else:
-			ortsel.w = rectangle.w
-
-		print ("ortsel 2", ortsel)
-
-		##########################################
-		## Determine orthogonal top of sidesel. ##
-		##########################################
+		############################################
+		## Determine orthogonal top of *sidesel*. ##
+		############################################
 
 		orthogonals = select_by_rect(selection, ortsel)
-
-		print("orthogonals", orthogonals, selection, ortsel)
-
 		if orthogonals:
 			if facing_left:
 				sortkey_orth = lambda r: r.x + r.w
@@ -770,24 +761,17 @@ class RectangleCloud(object):
 				sidesel.y = sel.y - INF
 				sidesel.h = INF + sel.h
 
-
 		####################################
 		## Select values for side bounds. ##
 		####################################
 
 		sideways = select_by_rect(selection, sidesel)
-		
-		print ("sideways 2", sideways, selection, sidesel)
-		
-
 		if sideways:
 			sideways.sort(key=sortkey_sides)
 
 			extract = [r.y for r in sideways] if vertical \
 								else [r.x for r in sideways]
 			i = bisect.bisect(extract, pivot)
-			
-			print("i", i, "pivot", pivot)
 
 			## Fringe case 1: *pivot* is below lowest rect's pivot value.
 			if not i:
@@ -797,14 +781,12 @@ class RectangleCloud(object):
 				else:
 					sidesel.x = sel.x - INF
 					sidesel.w = sideways[0].x - sel.x + INF
-				
-					print("hier!!!, sidesel", sidesel, sideways[0].x, sidesel.x, sidesel.w, INF)
 
 			## Fringe case 2: *pivot* is above highest rect's pivot value.
 			elif i == len(sideways):
 				ir = sideways[-1]
-				## ir occupies space where pivot is.
-				if does_cut(ir, pivot):
+
+				if does_cut(ir, pivot, vertical):
 					return None
 
 				if vertical:
@@ -818,8 +800,8 @@ class RectangleCloud(object):
 			## corresponding axis' values.
 			else:
 				ir0 = sideways[i-1]
-				## ir0 occupies space where *pivot* is.
-				if does_cut(ir0, pivot):
+
+				if does_cut(ir, pivot, vertical):
 					return None
 
 				ir1 = sideways[i]
@@ -832,8 +814,8 @@ class RectangleCloud(object):
 					sidesel.y = ir0.y + ir0.h
 					sidesel.h = ir1.y - sidesel.y
 				else:
-					sidesel.x = ir0.x + ir0.y
-					sidesel.w = irl.x - sidesel.x
+					sidesel.x = ir0.x + ir0.w
+					sidesel.w = ir1.x - sidesel.x
 		else:
 			if vertical:
 				sidesel.y = sel.y - INF
