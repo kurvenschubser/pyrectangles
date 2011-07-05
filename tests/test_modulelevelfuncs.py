@@ -59,3 +59,28 @@ def test_center():
 	
 	centered = rectangles.center(tobecentered, stable)
 	assert centered == R(50, 50, 20, 20)
+
+
+def test_partition():
+	occ = R(5, 5, 40, 40)
+
+	seed = 30, 25
+	sel = rectangles.partition(occ, seed, rectangles.DIRECTION_RIGHT)
+	assert sel == R(30, occ.y, occ.x + occ.w - 30, occ.h)
+
+	seed = 25, 30
+	sel = rectangles.partition(occ, seed, rectangles.DIRECTION_UP)
+	assert sel == R(occ.x, 30, occ.w, occ.y + occ.h - 30)
+	
+	seed = 20, 25
+	sel = rectangles.partition(occ, seed, rectangles.DIRECTION_LEFT)
+	assert sel == R(occ.x, occ.y, 20 - occ.x, occ.h)
+	
+	seed = 25, 20
+	sel = rectangles.partition(occ, seed, rectangles.DIRECTION_DOWN)
+	assert sel == R(occ.x, occ.y, occ.w, 20 - occ.y)
+
+
+def _test_does_cut():
+	assert 0
+	
